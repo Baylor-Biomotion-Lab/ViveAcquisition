@@ -1,9 +1,9 @@
-function thetas = viveRotAnalysis(fileLocation)
-%viveOrientationAnalysis takes in a folder location. The location should
-% have only .csv files which contain position or rotation information from
-% the Vive. Outputted is translations, which gives the experiment type,
-% ratio between Vive and Vicon, and how much the Vive and Vicon traveled
-% each.
+function translations = viveTranslationAnalysis(fileLocation)
+%viveTranslationAnalysis takes in a folder location. The location should
+%have only .csv files which contain position or rotation information from
+%the Vive. Outputted is translations, which gives the experiment type,
+%ratio between Vive and Vicon, and how much the Vive and Vicon traveled
+%each.
 %
 %
 % WARNING: xa,xb, and xy are determined from Vicon data files that
@@ -13,32 +13,39 @@ cd(fileLocation)
 files = dir('*.csv');
 files = {files.name}';
 c = 1;
-thetas = cell(0);
+translations = cell(0);
 lFile = length(files);
+
+% Euclidean distance anonymous function
+euclid3D = @(x1,x2,y1,y2,z1,z2) sqrt((x2-x1).^2 + (y2-y1).^2 + (z2-z1).^2);
 for i = length(files):-1:1
     fprintf('File %g/%g \n', lFile+1-i, lFile)
     % Filter out so that it's only controller 1
     if ~endsWith(files{i},'control1.csv')
         files(i) = [];
     else
-        % Vive rotation angles
-        vO = rotationExtract(files{i}(1:end-4));
-        % Total angle from Vive between beginning and end
-        [thetaV, ~] = rotComp(mean(vO(:,:,1:50),3), mean(vO(:,:,end-50:end),3));
+        % Total distance traveled by Vive between beginning and end
+        traj = load(files{i});
+        posStartVive = [mean(traj(1:50,1)), mean(traj(1:50,2)), mean(traj(1:50,3))];
+        posEndVive = [mean(traj(end-50:end,1)), mean(traj(end-50:end,2)), mean(traj(end-50:end,3))];
+        transVive = euclid3D(posStartVive(1), posEndVive(1), posStartVive(2), posEndVive(2),...
+            posStartVive(3), posEndVive(3));
         
-        % World rotation angles
+        % Total distance traveled by Vicon between beginning and end
         load([files{i}(1:end-12) '.mat'], 'trajectories', 'MarkerNames', 'TrialInfo');
+        [xa, ~, ~] = pickViveMarkers(trajectories, MarkerNames, TrialInfo, 'L');
+        posStartWorld = [mean(xa(1:100,1)), mean(xa(1:100,2)), mean(xa(1:100,3))];
+        posEndWorld = [mean(xa(end-100:end,1)), mean(xa(end-100:end,2)), mean(xa(end-100:end,3))];
         
-        [xa, xb, xy] = pickViveMarkers(trajectories, MarkerNames, TrialInfo, hand);
-        rotMatW = planeRotMats(xa,xb,xy);
-        % Total angle of world between beginning and end
-        [thetaW, ~] = rotComp(mean(rotMatW(:,:,1:100),3), mean(rotMatW(:,:,end-100:end),3));
+        transWorld = euclid3D(posStartWorld(1), posEndWorld(1), posStartWorld(2), posEndWorld(2),...
+            posStartWorld(3), posEndWorld(3));
         
-        thetas{c,1} = pullCategory(files(i));
-        thetas{c,2} = thetaV;
-        
-        thetas{c,3} = thetaW;
+        translations{c,1} = pullCategory(files(i));
+        translations{c,2} = transWorld/transVive;
+        translations{c,3} = transWorld;
+        translations{c,4} = transVive;
         c = c+1;
+        
     end
 end
 end
@@ -91,38 +98,4 @@ end
 function cat = pullCategory(name)
 name = split(name,'_');
 cat = name{4};
-end
-
-function rotsM = rotationExtract(fileName)
-% Load up the rotation file and extract the rotation matrices
-rots = load([fileName 'RotMat.csv']);
-rotsC = cell(length(rots)/3,1);
-rotsM = zeros(3,3,length(rots)/3);
-c=1;
-
-for i = 1:3:length(rots)-2
-    rotsC{c} = rots(i:i+2,:);
-    rotsM(:,:,c) = rotsC{c};
-    c = c+1;
-end
-end
-
-function [theta, Q] = rotComp(Rv, Rw)
-%rotComp compares rotation matrices. For more information see:
-% http://www.boris-belousov.net/2016/12/01/quat-dist/
-% Takes in two values, Rv and Rw. If they are 3D matrices, it calculates
-% the anles between each rotation matrix. If Rv and Rw are single rotation
-% matrices, it calculates theta between them.
-theta = zeros(length(Rv),1);
-Q = zeros(3,3,length(Rv));
-if length(size(Rv))>2
-    for frame = 1:length(Rv)
-        Q(:,:,frame) = Rv(:,:,frame)*Rw(:,:,frame)';
-        theta(frame) = acosd((trace(Q(:,:,frame))-1)/2);
-    end
-else
-    Q = Rv*Rw';
-    theta = acosd((trace(Q(:,:,1))-1)/2);
-end
-
 end
