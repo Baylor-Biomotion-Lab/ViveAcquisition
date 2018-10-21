@@ -29,7 +29,7 @@ for i = length(files):-1:1
         % World rotation angles
         load([files{i}(1:end-12) '.mat'], 'trajectories', 'MarkerNames', 'TrialInfo');
         
-        [xa, xb, xy] = pickViveMarkers(trajectories, MarkerNames, TrialInfo, hand);
+        [xa, xb, xy] = pickViveMarkers(trajectories, MarkerNames, TrialInfo, 'L');
         rotMatW = planeRotMats(xa,xb,xy);
         % Total angle of world between beginning and end
         [thetaW, ~] = rotComp(mean(rotMatW(:,:,1:100),3), mean(rotMatW(:,:,end-100:end),3));
@@ -40,6 +40,30 @@ for i = length(files):-1:1
         thetas{c,3} = thetaW;
         c = c+1;
     end
+end
+end
+
+function rotMatW = planeRotMats(xa,xb,xy)
+%planeRotMats calculates a rotation matrix based on 3 positions
+rotMatW = zeros(3,3,length(xa));
+
+for f = 1:length(xa)
+    % Calculate normal vectors from points xa,xb,xy
+    nab = (xb(f,:)-xa(f,:))/norm(xb(f,:)-xa(f,:));
+    nay = (xy(f,:)-xa(f,:))/norm(xy(f,:)-xa(f,:));
+    
+    n2 = nay;
+    n3 = cross(nab,nay);
+    n1 = cross(n2,n3);
+    
+%     disp(n2)
+%     disp(n2/norm(n2))
+%     fprintf('\n\n\n')
+
+    n3 = n3/norm(n3);
+    n1 = n1/norm(n1);
+    
+    rotMatW(:,:,f) = [n1; n2; n3];
 end
 end
 
